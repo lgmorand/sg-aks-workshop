@@ -1,24 +1,24 @@
 # Cluster Pre-Provisioning
 
-This section walks us through all the pre-requisite setup before actually provisioning the Azure Kubernetes Service (AKS) cluster. Most organizations have existing virtual networks that they need to deploy into, with networking rules that control ingress and egress traffic.
+This section walks through all of the prerequisites that should be completed before provisioning the Azure Kubernetes Service (AKS) cluster. Most organizations have existing virtual networks they would like to deploy the cluster into, with networking rules that control ingress and egress traffic.
 
-For the purpose of this workshop we will be using Azure Firewall to control egress traffic destined for the Internet or to simulate going on-prem. Network Security Groups (NSGs) and User-Defined Routes (UDRs) will be used to control North/South traffic in and out of the AKS cluster itself.
+For the purpose of this workshop, we will be using Azure Firewall to control egress traffic destined for the Internet or to simulate going on-premises. Network Security Groups (NSGs) and User-Defined Routes (UDRs) will be used to control North/South traffic in and out of the AKS cluster itself.
 
 ## Variable Setup
 
-The variables are pretty straight forward, but please note there are a few words of caution on some of them.
+The variables should be fairly straightforward, however a few notes have been included on those where additional information is necessary.
 
 ```bash
-PREFIX="contosofin"
+PREFIX="contosofin" # NOTE: Please make sure PREFIX is unique in your tenant, you must not have any hyphens '-' in the value.
 RG="${PREFIX}-rg"
 LOC="eastus"
-NAME="${PREFIX}20191111"
+NAME="${PREFIX}"
 ACR_NAME="${NAME}acr"
 VNET_NAME="${PREFIX}vnet"
 AKSSUBNET_NAME="${PREFIX}akssubnet"
 SVCSUBNET_NAME="contosofinsvcsubnet"
 APPGWSUBNET_NAME="${PREFIX}appgwsubnet"
-# DO NOT CHANGE FWSUBNET_NAME - This is currently a requirement for Azure Firewall.
+# NOTE: DO NOT CHANGE FWSUBNET_NAME - This is currently a requirement for Azure Firewall.
 FWSUBNET_NAME="AzureFirewallSubnet"
 FWNAME="${PREFIX}fw"
 FWPUBLICIP_NAME="${PREFIX}fwpublicip"
@@ -31,7 +31,7 @@ AGPUBLICIP_NAME="${PREFIX}agpublicip"
 
 ## Create Resource Group
 
-This section leverages the variables from above and creates the initial Resource Group where all of this will be deployed.
+This section leverages the variables from above and creates the initial Resource Group where all of the subsequent resources will be deployed.
 
 **For the SUBID (Azure Subscription ID), be sure to update your Subscription Name. If you do not know it, feel free to copy and paste your ID directly in. We will need the SUBID variable when working with Azure Resource IDs later in the walkthrough.**
 
@@ -51,12 +51,12 @@ az group create --name $RG --location $LOC
 
 ## AKS Creation VNET Pre-requisites
 
-This section walks through the Virtual Network (VNET) setup pre-requisites before actually creating the AKS Cluster. One caveat on the subnet sizing below. All subnets were selected as /24 because it made things simple, but that is not a requirement. Please work with your networking teams to size the subnets appropriately for your organization's needs.
+This section walks through the Virtual Network (VNET) setup prerequisites before creating the AKS Cluster. NOTE: all subnets were selected as /24 because it made things simple, but that is not a requirement. Please work with your networking teams to size the subnets appropriately for your organization's needs.
 
 Here is a brief description of each of the dedicated subnets leveraging the variables populated from above:
 
 * AKSSUBNET_NAME - This is where the AKS Cluster will get deployed.
-* SVCSUBNET_NAME - This is the subnet that will be used for **Kubernetes Services** that are exposed via an Internal Load Balancer (ILB). By doing it this way we do not take away from the existing IP Address space in the AKS subnet that is used for Nodes and Pods.
+* SVCSUBNET_NAME - This is the subnet that will be used for **Kubernetes Services** that are exposed via an Internal Load Balancer (ILB). By taking this approach, we do not take away from the existing IP Address space in the AKS subnet that is used for Nodes and Pods.
 * APPGWSUBNET_NAME - This subnet is dedicated to Azure Application Gateway v2 which will serve as a Web Application Firewall (WAF).
 * FWSUBNET_NAME - This subnet is dedicated to Azure Firewall. **NOTE: The name cannot be changed at this time.**
 
@@ -77,25 +77,27 @@ az network vnet subnet create \
     --resource-group $RG \
     --vnet-name $VNET_NAME \
     --name $APPGWSUBNET_NAME \
-    --address-prefix 100.64.3.0/24
+    --address-prefix 100.64.3.0/26
 az network vnet subnet create \
     --resource-group $RG \
     --vnet-name $VNET_NAME \
     --name $FWSUBNET_NAME \
-    --address-prefix 100.64.4.0/24
+    --address-prefix 100.64.4.0/26
 ```
 
 ## AKS Creation Azure Firewall Pre-requisites
 
-This section walks through setting up Azure Firewall inbound and outbound rules. The main purpose of the firewall here is to help organizations to set up ingress and egress traffic rules so the AKS Cluster is not just open to the world and cannot reach out to everything on the Internet at the same time.
+This section walks through setting up Azure Firewall inbound and outbound rules. The main purpose of this firewall is to help organizations set up ingress and egress traffic rules to protect the AKS Cluster from unnecessary traffic to and from the internet.
 
 **NOTE: Completely locking down inbound and outbound rules for AKS is not supported and will result in a broken cluster.**
 
 **NOTE: There are no inbound rules required for AKS to run. The only time an inbound rule is required is to expose a workload/service.**
 
-It starts with creating a Public IP address and then gets into creating the Azure Firewall along with all of the Network (think ports and protocols) and Application (think egress traffic based on FQDNs) rules. If you want to lock down destination IP Addresses on some of the firewall rules you will have to use the destination IP Addresses for the datacenter region you are deploying into due to how AKS communicates with the managed control plane. The list of IP Addresses per region in XML format can be found and downloaded by clicking [here](https://www.microsoft.com/en-us/download/details.aspx?id=56519).
+First, we will create a Public IP address. Then we will create the Azure Firewall, along with all of the Network (think ports and protocols) and Application (think egress traffic based on FQDNs) rules. 
 
-**NOTE: Azure Firewall, like other Network Virtual Appliances (NVAs), can be costly so please take note of that when deploying and if you intend to leave everything running.**
+If you want to lockdown destination IP Addresses on some of the firewall rules, you will have to use the destination IP Addresses for the datacenter region you are deploying into; this is based on how AKS communicates with the managed control plane. The list of IP Addresses per region in XML format can be found and downloaded by clicking [here](https://www.microsoft.com/en-us/download/details.aspx?id=56519).
+
+**NOTE: Azure Firewall, like other Network Virtual Appliances (NVAs), can be costly; please be aware of this when deploying, especially if you intend to leave everything running.**
 
 ```bash
 # Add the Azure Firewall extension to Azure CLI in case you do not already have it.
@@ -105,7 +107,6 @@ az network public-ip create -g $RG -n $FWPUBLICIP_NAME -l $LOC --sku "Standard"
 # Create Azure Firewall
 az network firewall create -g $RG -n $FWNAME -l $LOC
 # Configure Azure Firewall IP Config - This command will take several mins so be patient.
-# ***** Note: There have been troubles with this command. If this happens please go into the portal, delete the existing firewall and public IP, then provision the Public IP and Azure Firewall through the portal at the same time.*****
 az network firewall ip-config create -g $RG -f $FWNAME -n $FWIPCONFIG_NAME --public-ip-address $FWPUBLICIP_NAME --vnet-name $VNET_NAME
 # Capture Azure Firewall IP Address for Later Use
 FWPUBLIC_IP=$(az network public-ip show -g $RG -n $FWPUBLICIP_NAME --query "ipAddress" -o tsv)
@@ -131,140 +132,16 @@ az network firewall network-rule create -g $RG -f $FWNAME --collection-name 'aks
 # Add Application FW Rules
 # Required AKS FW Rules
 # https://docs.microsoft.com/en-us/azure/aks/limit-egress-traffic#required-ports-and-addresses-for-aks-clusters
-az network firewall application-rule create -g $RG -f $FWNAME \
-    --collection-name 'AKS_Global_Required' \
-    --action allow \
-    --priority 100 \
-    -n 'required' \
-    --source-addresses '*' \
-    --protocols 'http=80' 'https=443' \
-    --target-fqdns \
-        'aksrepos.azurecr.io' \
-        '*blob.core.windows.net' \
-        'mcr.microsoft.com' \
-        '*cdn.mscr.io' \
-        'management.azure.com' \
-        'login.microsoftonline.com' \
-        'ntp.ubuntu.com' \
-        'packages.microsoft.com' \
-        'acs-mirror.azureedge.net'
 
-# Azure Public Cloud Specific
-# Change FQDN based on your Cluster's DC Location (eg. *.hcp.<location>.azmk8s.io where <location> is something like 'eastus')
-# ***NOTE:*** Azure US Gov and China will have different FQDNs
+# Single F/W Rule
 az network firewall application-rule create -g $RG -f $FWNAME \
-    --collection-name 'AKS_Cloud_Specific_Required' \
-    --action allow \
-    --priority 200 \
-    -n 'required' \
-    --source-addresses '*' \
-    --protocols 'http=80' 'https=443' \
-    --target-fqdns \
-        '*.hcp.eastus.azmk8s.io' \
-        '*.tun.eastus.azmk8s.io'
-
-# Required for AKS Updates
-# https://docs.microsoft.com/en-us/azure/aks/limit-egress-traffic#optional-recommended-addresses-and-ports-for-aks-clusters
-az network firewall application-rule create -g $RG -f $FWNAME \
-    --collection-name 'AKS_Update_Required' \
-    --action allow \
-    --priority 300 \
-    -n 'ubuntu' \
-    --source-addresses '*' \
-    --protocols 'http=80' 'https=443' \
-    --target-fqdns \
-        'security.ubuntu.com' \
-        'azure.archive.ubuntu.com' \
-        'changelogs.ubuntu.com'
-
-# Only Required for GPU
-# https://docs.microsoft.com/en-us/azure/aks/limit-egress-traffic#required-addresses-and-ports-for-gpu-enabled-aks-clusters
-az network firewall application-rule create -g $RG -f $FWNAME \
-    --collection-name 'AKS_GPU_Optional' \
-    --action allow \
-    --priority 400 \
-    -n 'nvidia' \
-    --source-addresses '*' \
-    --protocols 'https=443' \
-    --target-fqdns \
-        'nvidia.github.io' \
-        'us.download.nvidia.com' \
-        'apt.dockerproject.org'
-
-# Only Required for Azure Monitor for Containers
-# https://docs.microsoft.com/en-us/azure/aks/limit-egress-traffic#required-addresses-and-ports-with-azure-monitor-for-containers-enabled
-az network firewall application-rule create -g $RG -f $FWNAME \
-    --collection-name 'AKS_Azure_Monitor_Required' \
-    --action allow \
-    --priority 500 \
-    -n 'azure_monitor' \
-    --source-addresses '*' \
-    --protocols 'https=443' \
-    --target-fqdns \
-        'dc.services.visualstudio.com' \
-        '*.ods.opinsights.azure.com' \
-        '*.oms.opinsights.azure.com' \
-        '*.microsoftonline.com' \
-        '*.monitoring.azure.com'
-
-# Only Required for Reaching Public Container Registries
-az network firewall application-rule create -g $RG -f $FWNAME \
-    --collection-name 'AKS_For_Public_Container_Registries_Required' \
-    --action allow \
-    --priority 600 \
-    -n 'registries' \
-    --source-addresses '*' \
-    --protocols 'https=443' \
-    --target-fqdns \
-        '*auth.docker.io' \
-        '*cloudflare.docker.io' \
-        '*cloudflare.docker.com' \
-        '*registry-1.docker.io' \
-        'apt.dockerproject.org' \
-        'gcr.io' \
-        'storage.googleapis.com' \
-        '*.quay.io' \
-        'quay.io' \
-        '*.cloudfront.net' \
-        '*.azurecr.io' \
-        '*.gk.azmk8s.io' \
-        'raw.githubusercontent.com' \
-        'gov-prod-policy-data.trafficmanager.net' \
-        'api.snapcraft.io'
-
-# Required if using Flux - Must communicate with Git Repo (i.e. GitHub)
-az network firewall application-rule create -g $RG -f $FWNAME \
-    --collection-name 'Flux_Optional' \
-    --action allow \
-    --priority 700 \
-    -n 'GitHub' \
-    --source-addresses '*' \
-    --protocols 'https=443' \
-    --target-fqdns \
-        '*.github.com'
-
-# Required if using Azure Key Vault over Public Internet
-az network firewall application-rule create -g $RG -f $FWNAME \
-    --collection-name 'Azure_Services_Required' \
-    --action allow \
-    --priority 800 \
-    -n 'KeyVault' \
-    --source-addresses '*' \
-    --protocols 'https=443' \
-    --target-fqdns \
-        '*.vault.azure.net'
-
-# Only Required if using Azure DevSpaces
-# https://docs.microsoft.com/en-us/azure/aks/limit-egress-traffic#required-addresses-and-ports-with-azure-dev-spaces-enabled
-az network firewall application-rule create -g $RG -f $FWNAME \
-    --collection-name 'Azure_DevSpaces_Optional' \
-    --action allow \
-    --priority 900 \
-    -n 'Required' \
-    --source-addresses '*' \
-    --protocols 'https=443' \
-    --target-fqdns \
-        '*.azds.io'
+ --collection-name 'AKS' \
+ --action allow \
+ --priority 100 \
+ -n 'required' \
+ --source-addresses '*' \
+ --protocols 'http=80' 'https=443' \
+ --target-fqdns 'aksrepos.azurecr.io' '*blob.core.windows.net' 'mcr.microsoft.com' '*cdn.mscr.io' 'management.azure.com' 'login.microsoftonline.com' 'ntp.ubuntu.com' 'packages.microsoft.com' 'acs-mirror.azureedge.net' '*.hcp.eastus.azmk8s.io' '*.tun.eastus.azmk8s.io' 'security.ubuntu.com' '*archive.ubuntu.com' 'changelogs.ubuntu.com' 'nvidia.github.io' 'us.download.nvidia.com' 'apt.dockerproject.org' 'dc.services.visualstudio.com' '*.ods.opinsights.azure.com' '*.oms.opinsights.azure.com'  '*.microsoftonline.com' '*.monitoring.azure.com' '*auth.docker.io' '*cloudflare.docker.io' '*cloudflare.docker.com' '*registry-1.docker.io' 'apt.dockerproject.org' 'gcr.io' 'storage.googleapis.com' '*.quay.io' 'quay.io' '*.cloudfront.net' '*.azurecr.io' '*.gk.azmk8s.io' 'raw.githubusercontent.com' 'gov-prod-policy-data.trafficmanager.net' 'api.snapcraft.io' '*.github.com' '*.vault.azure.net' '*.azds.io'
 
 # Associate AKS Subnet to FW
 az network vnet subnet update -g $RG --vnet-name $VNET_NAME --name $AKSSUBNET_NAME --route-table $FWROUTE_TABLE_NAME

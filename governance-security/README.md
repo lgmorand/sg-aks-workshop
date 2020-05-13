@@ -2,7 +2,7 @@
 
 This section walks us through the different aspects of governance and security that need to be thought about prior to implementing any solution. To help guide the way, we will be leveraging the [customer scenario](/customer-scenario/README.md) based on Contoso Financials. The scenario describes the customer, along with some background, and wraps up with a list of the requirements that need to be met.
 
-Now that we know the customer scenario and understand what needs to get implemented, let's get started. The majority of what is talked about in the rest of this section is technology agnostic with the implementation varying from customer to customer. For the purposes of this workshop we will be focusing on how to implement the solution using Microsoft Azure along with some Open Source Software (OSS) solutions.
+Now that we know the customer scenario and understand what needs to be implemented, let's get started. The majority of this section's content is technology agnostic, as implementation varies from customer to customer. For the purposes of this workshop, we will be focusing on how to implement the solution using Microsoft Azure along with some Open Source Software (OSS) solutions.
 
 ## Security Control Lifecycle in the Cloud
 

@@ -12,20 +12,20 @@ locals {
 
 resource "kubernetes_namespace" "flux" {
   metadata {
-    name = "${local.k8s-ns}"
+    name = local.k8s-ns
   }
 
-  depends_on = ["kubernetes_namespace.flux"]
+  depends_on = [kubernetes_namespace.flux]
 }
 
 resource "kubernetes_service_account" "flux" {
   metadata {
     name      = "flux"
-    namespace = "${local.k8s-ns}"
+    namespace = local.k8s-ns
 
     labels = local.labels
   }
-  depends_on = ["kubernetes_namespace.flux"]
+  depends_on = [kubernetes_namespace.flux]
 }
 
 resource "kubernetes_cluster_role" "flux" {
@@ -48,7 +48,7 @@ resource "kubernetes_cluster_role" "flux" {
     verbs             = ["*"]
   }
 
-  depends_on = ["kubernetes_namespace.flux"]
+  depends_on = [kubernetes_namespace.flux]
 }
 
 resource "kubernetes_cluster_role_binding" "flux" {
@@ -69,21 +69,21 @@ resource "kubernetes_cluster_role_binding" "flux" {
   subject {
     kind      = "ServiceAccount"
     name      = "flux"
-    namespace = "${local.k8s-ns}"
+    namespace = local.k8s-ns
     api_group = ""
   }
 
   depends_on = [
-    "kubernetes_namespace.flux",
-    "kubernetes_cluster_role.flux",
-    "kubernetes_service_account.flux",
+    kubernetes_namespace.flux,
+    kubernetes_cluster_role.flux,
+    kubernetes_service_account.flux,
   ]
 }
 
 resource "kubernetes_deployment" "flux" {
   metadata {
     name      = "flux"
-    namespace = "${local.k8s-ns}"
+    namespace = local.k8s-ns
   }
 
   spec {
@@ -130,7 +130,7 @@ resource "kubernetes_deployment" "flux" {
 
         container {
           name  = "flux"
-          image = "docker.io/fluxcd/flux:1.14.2"
+          image = "docker.io/fluxcd/flux:1.18.0"
 
           volume_mount {
             name       = "git-key"
@@ -157,30 +157,32 @@ resource "kubernetes_deployment" "flux" {
   }
 
   depends_on = [
-    "kubernetes_cluster_role_binding.flux",
-    "kubernetes_secret.flux-git-deploy",
+    kubernetes_cluster_role_binding.flux,
+    kubernetes_secret.flux-git-deploy,
   ]
 }
 
 resource "kubernetes_secret" "flux-git-deploy" {
   metadata {
     name      = "flux-git-deploy"
-    namespace = "${local.k8s-ns}"
+    namespace = local.k8s-ns
   }
 
   type = "Opaque"
 
   data = {
-    identity = "${tls_private_key.flux.private_key_pem}"
+    identity = tls_private_key.flux.private_key_pem
   }
 
-  depends_on = ["kubernetes_namespace.flux"]
+  depends_on = [
+    kubernetes_namespace.flux
+    ]
 }
 
 resource "kubernetes_deployment" "memcached" {
   metadata {
     name      = "memcached"
-    namespace = "${local.k8s-ns}"
+    namespace = local.k8s-ns
   }
 
   spec {
@@ -200,7 +202,7 @@ resource "kubernetes_deployment" "memcached" {
       spec {
         container {
           name  = "memcached"
-          image = "memcached:1.4.25"
+          image = "memcached:latest"
 
           port {
             name           = "clients"
@@ -211,13 +213,15 @@ resource "kubernetes_deployment" "memcached" {
     }
   }
 
-  depends_on = ["kubernetes_namespace.flux"]
+  depends_on = [
+    kubernetes_namespace.flux
+    ]
 }
 
 resource "kubernetes_service" "memcached" {
   metadata {
     name      = "memcached"
-    namespace = "${local.k8s-ns}"
+    namespace = local.k8s-ns
   }
 
   spec {
@@ -231,5 +235,7 @@ resource "kubernetes_service" "memcached" {
     }
   }
 
-  depends_on = ["kubernetes_namespace.flux"]
+  depends_on = [
+    kubernetes_namespace.flux
+  ]
 }
